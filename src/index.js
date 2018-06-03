@@ -68,7 +68,7 @@ module.exports = _ref => {
                     path.unshiftContainer("body", variableDeclaration);
                 }
             },
-            ArrowFunctionExpression(path) {
+            ArrowFunctionExpression(path, pass) {
                 if (
                     path.node.params.length == 1 &&
                     path.node.params[0].name == "props"
@@ -82,6 +82,7 @@ module.exports = _ref => {
                     else catcher.block.body.unshift(path.node.body);
 
                     path.get("body").replaceWith(t.blockStatement([catcher]));
+                    pass.insertErrorHandler = true;
                 }
             },
             Class(path, pass) {
