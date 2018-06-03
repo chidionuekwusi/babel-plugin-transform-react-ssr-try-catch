@@ -73,7 +73,6 @@ module.exports = _ref => {
                     path.node.params[0].name == "props"
                 ) {
                     let origo = path.node.body.body;
-                    console.log(origo);
                     path.node.body.body = [];
                     tryCatchRenderFunctionAST.block.body.unshift(...origo);
                     path
