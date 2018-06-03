@@ -13,6 +13,7 @@ const tryCatchRenderAST = babylon.parse(tryCatchRender, {
 const tryCatchRenderFunctionAST = babylon.parse(tryCatchRenderFunction, {
     allowReturnOutsideFunction: true
 }).program.body[0];
+const copy = value => JSON.parse(JSON.stringify(value));
 const createReactChecker = t => node => {
     const superClass = node.superClass;
     return (
@@ -40,7 +41,7 @@ module.exports = _ref => {
             }
         }
     };
-
+    let numberOfTimes = 1;
     return {
         visitor: {
             Program: {
@@ -72,15 +73,15 @@ module.exports = _ref => {
                     path.node.params.length == 1 &&
                     path.node.params[0].name == "props"
                 ) {
-                    let origo = path.node.body.body;
-                    path.node.body.body = [];
-                    tryCatchRenderFunctionAST.block.body.unshift(...origo);
-                    path
-                        .get("body")
-                        .unshiftContainer(
-                            "body",
-                            t.blockStatement([tryCatchRenderFunctionAST])
-                        );
+                    //  console.log(path);
+                    let origo = path.node.body.body,
+                        catcher = copy(tryCatchRenderFunctionAST);
+
+                    if (Array.prototype.isPrototypeOf(origo))
+                        catcher.block.body.unshift(...origo);
+                    else catcher.block.body.unshift(path.node.body);
+
+                    path.get("body").replaceWith(t.blockStatement([catcher]));
                 }
             },
             Class(path, pass) {
