@@ -1,27 +1,33 @@
-'use strict';
+"use strict";
 
-const babylon = require('babylon');
+const babylon = require("babylon");
 
-const errorHandlerName = 'ReactSSRErrorHandler';
-const originalRenderMethodName = '__originalRenderMethod__';
+const errorHandlerName = "ReactSSRErrorHandler";
+const originalRenderMethodName = "__originalRenderMethod__";
 
-const tryCatchRender = `try{return this.__originalRenderMethod__();}catch(e){return ${ errorHandlerName }(e, this.constructor.name)}`;
-const tryCatchRenderAST = babylon.parse(tryCatchRender, {allowReturnOutsideFunction: true}).program.body[0];
-
-const createReactChecker = (t) => (node) => {
+const tryCatchRenderFunction = `try{}catch(e){return ${errorHandlerName}(e)}`;
+const tryCatchRender = `try{return this.__originalRenderMethod__();}catch(e){return ${errorHandlerName}(e, this.constructor.name)}`;
+const tryCatchRenderAST = babylon.parse(tryCatchRender, {
+    allowReturnOutsideFunction: true
+}).program.body[0];
+const tryCatchRenderFunctionAST = babylon.parse(tryCatchRenderFunction, {
+    allowReturnOutsideFunction: true
+}).program.body[0];
+const createReactChecker = t => node => {
     const superClass = node.superClass;
-    return t.isIdentifier(superClass, {name: 'Component'}) ||
-        t.isIdentifier(superClass, {name: 'PureComponent'}) ||
-        t.isMemberExpression(superClass) && (
-            t.isIdentifier(superClass.object, {name: 'React'}) &&
-            (
-                t.isIdentifier(superClass.property, {name: 'Component'}) ||
-                t.isIdentifier(superClass.property, {name: 'PureComponent'})
-            )
-        );
+    return (
+        t.isIdentifier(superClass, { name: "Component" }) ||
+        t.isIdentifier(superClass, { name: "PureComponent" }) ||
+        (t.isMemberExpression(superClass) &&
+            (t.isIdentifier(superClass.object, { name: "React" }) &&
+                (t.isIdentifier(superClass.property, { name: "Component" }) ||
+                    t.isIdentifier(superClass.property, {
+                        name: "PureComponent"
+                    }))))
+    );
 };
 
-module.exports = (_ref) => {
+module.exports = _ref => {
     const t = _ref.types;
 
     const isReactClass = createReactChecker(t);
@@ -29,10 +35,10 @@ module.exports = (_ref) => {
     const bodyVisitor = {
         ClassMethod: function(path) {
             // finds render() method definition
-            if (path.node.key.name === 'render') {
+            if (path.node.key.name === "render") {
                 this.renderMethod = path;
             }
-        },
+        }
     };
 
     return {
@@ -44,17 +50,38 @@ module.exports = (_ref) => {
                     }
 
                     if (!state.opts.errorHandler) {
-                        throw Error('[babel-plugin-transform-react-ssr-try-catch] You must define "errorHandler" property');
+                        throw Error(
+                            '[babel-plugin-transform-react-ssr-try-catch] You must define "errorHandler" property'
+                        );
                     }
 
                     const varName = t.identifier(errorHandlerName);
-                    const variableDeclaration = t.variableDeclaration('const', [
+                    const variableDeclaration = t.variableDeclaration("const", [
                         t.variableDeclarator(
                             varName,
-                            t.callExpression(t.identifier('require'), [t.stringLiteral(state.opts.errorHandler)])
+                            t.callExpression(t.identifier("require"), [
+                                t.stringLiteral(state.opts.errorHandler)
+                            ])
                         )
                     ]);
-                    path.unshiftContainer('body', variableDeclaration);
+                    path.unshiftContainer("body", variableDeclaration);
+                }
+            },
+            ArrowFunctionExpression(path) {
+                if (
+                    path.node.params.length == 1 &&
+                    path.node.params[0].name == "props"
+                ) {
+                    let origo = path.node.body.body;
+                    console.log(origo);
+                    path.node.body.body = [];
+                    tryCatchRenderFunctionAST.block.body.unshift(...origo);
+                    path
+                        .get("body")
+                        .unshiftContainer(
+                            "body",
+                            t.blockStatement([tryCatchRenderFunctionAST])
+                        );
                 }
             },
             Class(path, pass) {
@@ -63,7 +90,7 @@ module.exports = (_ref) => {
                 }
 
                 const state = {
-                    renderMethod: null,
+                    renderMethod: null
                 };
 
                 path.traverse(bodyVisitor, state);
@@ -76,9 +103,17 @@ module.exports = (_ref) => {
                 state.renderMethod.node.key.name = originalRenderMethodName;
 
                 // generate new render() method
-                path.get('body').unshiftContainer('body',
-                    t.classMethod('method', t.identifier('render'), [], t.blockStatement([tryCatchRenderAST]))
-                );
+                path
+                    .get("body")
+                    .unshiftContainer(
+                        "body",
+                        t.classMethod(
+                            "method",
+                            t.identifier("render"),
+                            [],
+                            t.blockStatement([tryCatchRenderAST])
+                        )
+                    );
 
                 // pass info for Program:exit to create "const ReactSSRErrorHandler = require('./errorHandler')"
                 pass.insertErrorHandler = true;
