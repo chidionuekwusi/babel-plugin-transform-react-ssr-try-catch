@@ -36,6 +36,9 @@ module.exports = _ref => {
     const bodyVisitor = {
         ClassMethod: function(path) {
             // finds render() method definition
+            if (path.node.key.name === originalRenderMethodName) {
+                this.alreadyHasMethod = true;
+            }
             if (path.node.key.name === "render") {
                 this.renderMethod = path;
             }
@@ -73,13 +76,17 @@ module.exports = _ref => {
                     path.node.params.length == 1 &&
                     path.node.params[0].name == "props"
                 ) {
-                    //  console.log(path);
+                    //console.log(path);
                     let origo = path.node.body.body,
                         catcher = copy(tryCatchRenderFunctionAST);
 
                     if (Array.prototype.isPrototypeOf(origo))
                         catcher.block.body.unshift(...origo);
-                    else catcher.block.body.unshift(path.node.body);
+                    else {
+                        let returnStatement = t.returnStatement();
+                        returnStatement.argument = path.node.body;
+                        catcher.block.body.unshift(returnStatement);
+                    }
 
                     path.get("body").replaceWith(t.blockStatement([catcher]));
                     pass.insertErrorHandler = true;
@@ -96,7 +103,7 @@ module.exports = _ref => {
 
                 path.traverse(bodyVisitor, state);
 
-                if (!state.renderMethod) {
+                if (!state.renderMethod || state.alreadyHasMethod) {
                     return;
                 }
 
